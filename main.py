@@ -18,11 +18,13 @@ class MainWindow(QMainWindow):
 
         # Instantiate sub-components
         self.file_tree = CustomFileTreeView()
+        self.devicetree = CustomDeviceTreeView()
         self.text_editor = CustomTextEditor()
         
         # Assemble UI layout using QSplitter
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.addWidget(self.file_tree)    # Left Column
+        main_splitter.addWidget(self.device_tree)    # Center Column
         main_splitter.addWidget(self.text_editor)  # Right Column
         main_splitter.setSizes([250, 850])         # Initial column widths
         self.setCentralWidget(main_splitter)
