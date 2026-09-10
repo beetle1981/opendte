@@ -2,57 +2,60 @@ import sys
 from PySide6.QtCore import Qt, QDir
 from PySide6.QtGui import QKeySequence, QAction
 from PySide6.QtWidgets import QApplication, QMainWindow, QTextEdit, QMessageBox
-from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QFileSystemModel, QTextEdit, QListWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter, QTreeView, QFileSystemModel, QFileDialog, QTextEdit, QListWidget
+
 
 class SplitWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PySide6 区域分割 (QSplitter)")
+        self.setWindowTitle("Open Device Tree Editor")
         self.resize(800, 500)
 
-        # 1. 创建一个水平方向的拆分器（默认就是水平 Horizontal）
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
+        # 2. 启用底部的状态栏（用于展示菜单项的悬浮提示）
+        self.statusBar()
 
-        file_model = QFileSystemModel()
-        root_path = QDir.currentPath()
-        file_model.setRootPath(root_path)
+        self.init_ui()
+        # 3. 初始化创建菜单栏
+        self.init_menu_bar()
+    def init_ui(self):
+        # 1. 创建一个水平方向的拆分器（默认就是水平 Horizontal）
+        self.main_splitter = QSplitter(self)
+
+        self.file_model = QFileSystemModel()
+        # root_path = QDir.currentPath()
+        # file_model.setRootPath(root_path)
         
-        left_tree = QTreeView()
-        left_tree.setModel(file_model)
-        left_tree.setRootIndex(file_model.index(root_path))
+        self.left_tree = QTreeView()
+        self.left_tree.setModel(self.file_model)
+        # self.left_tree.setRootIndex(self.file_model.index(root_path))
         # 隐藏多余列，只留文件名
-        for i in range(1, file_model.columnCount()):
-            left_tree.setColumnHidden(i, True)
+        for i in range(1, self.file_model.columnCount()):
+            self.left_tree.setColumnHidden(i, True)
 
         # ====== 【第二栏：中间核心编辑器】 ======
-        center_editor = QTextEdit("中间的核心代码/文本编辑区域...")
+        self.center_editor = QTextEdit("中间的核心代码/文本编辑区域...")
 
         # ====== 【第三栏：右侧结构导航/属性栏】 ======
-        right_sidebar = QListWidget()
-        right_sidebar.addItems(["# 类: MainApp", "  - 函数: __init__", "  - 函数: setup_ui", "# 类: DataModel"])
+        self.right_sidebar = QListWidget()
+        self.right_sidebar.addItems(["# 类: MainApp", "  - 函数: __init__", "  - 函数: setup_ui", "# 类: DataModel"])
 
         # 2. 按从左到右的顺序，将三个组件逐个塞进同一个 Splitter
-        main_splitter.addWidget(left_tree)      # 第一栏
-        main_splitter.addWidget(center_editor)   # 第二栏
-        main_splitter.addWidget(right_sidebar)  # 第三栏
+        self.main_splitter.addWidget(self.left_tree)      # 第一栏
+        self.main_splitter.addWidget(self.center_editor)   # 第二栏
+        self.main_splitter.addWidget(self.right_sidebar)  # 第三栏
 
         # 3. 核心设置：控制三栏的“初始宽度比例”
         # 传入一个包含 3 个整数的列表，分别对应第一、二、三栏的初始像素宽度
-        main_splitter.setSizes([250, 600, 250])
+        self.main_splitter.setSizes([250, 600, 250])
 
         # 4. 优化：限制左侧和右侧栏的最小宽度，防止用户把它拖得太小导致画面崩溃
-        left_tree.setMinimumWidth(150)
-        right_sidebar.setMinimumWidth(150)
-        center_editor.setMinimumWidth(300) # 编辑区保证最小宽度
+        self.left_tree.setMinimumWidth(150)
+        self.right_sidebar.setMinimumWidth(150)
+        self.center_editor.setMinimumWidth(300) # 编辑区保证最小宽度
 
-        # 5. 设置为主窗口的中心组件
-        self.setCentralWidget(main_splitter)
-                # 2. 启用底部的状态栏（用于展示菜单项的悬浮提示）
-        self.statusBar()
+               # 5. 设置为主窗口的中心组件
+        self.setCentralWidget(self.main_splitter)
 
-        # 3. 初始化创建菜单栏
-        self.init_menu_bar()
-    
     def init_menu_bar(self):
         # 获取主窗口自带的全局菜单栏对象
         menu_bar = self.menuBar()
@@ -80,6 +83,15 @@ class SplitWindow(QMainWindow):
         # 添加一条灰色的菜单分割线
         file_menu.addSeparator()
 
+        open_folder_action = QAction("打开文件夹...", self)
+        open_folder_action.setShortcut("Ctrl+Shift+O") # 绑定快捷键
+        open_folder_action.setStatusTip("选择一个文件夹导入到左侧目录树")
+        # 核心：将菜单点击事件连接到自定义的槽函数
+        open_folder_action.triggered.connect(self.on_open_folder)
+        file_menu.addAction(open_folder_action)
+
+        file_menu.addSeparator()
+
         # 退出动作
         exit_action = QAction("退出", self)
         exit_action.setShortcut("Alt+F4")
@@ -102,6 +114,26 @@ class SplitWindow(QMainWindow):
     # 菜单触发对应的自定义槽函数
     def on_new_file(self):
         QMessageBox.information(self, "提示", "你点击了‘新建’菜单！")
+    def on_open_folder(self):
+        # 弹出 Windows 原生文件夹选择对话框
+        # 参数说明：self, 对话框标题, 默认打开路径（这里设为当前用户工作目录）
+        selected_directory = QFileDialog.getExistingDirectory(
+        self, 
+        "选择要打开的文件夹", 
+        QDir.currentPath(),
+        QFileDialog.Option.ShowDirsOnly # 只显示文件夹
+        )
+
+        # 如果用户点击了“取消”或者没选文件夹，selected_directory 会返回空字符串
+        if selected_directory:
+            # 1. 更新文件系统模型的根路径
+            self.file_model.setRootPath(selected_directory)
+            # 2. 让树状视图定位并展示这个新路径
+            self.left_tree.setRootIndex(self.file_model.index(selected_directory))
+            # 3. 联动更新主窗口的标题，显示当前打开的项目路径
+            self.setWindowTitle(f"Open Device Tree Editor - {selected_directory}")
+            self.center_editor.setPlainText(f"Folder opened successfully：{selected_directory}\nDuble click file to edit.")
+            self.statusBar().showMessage(f"当前工作目录: {selected_directory}", 3000)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
