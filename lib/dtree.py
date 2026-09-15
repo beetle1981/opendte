@@ -1,8 +1,8 @@
 import os
-import re
+import re, unicodedata
+from devicetree import dtlib
 from pathlib import Path
-from pydevicetree import Devicetree
-from lib.dnode import OpenDeviceTreeNode
+from dnode import OpenDeviceTreeNode
 
 class OpenDeviceTree:
     def __init__(self, file_path):
@@ -11,46 +11,42 @@ class OpenDeviceTree:
         self.stem = Path(file_path).stem #filename
         self.include = []
         self.alias = {}
-        self.dnode = OpenDeviceTreeNode()
-
-
-
-
-    def merge_dts_includes(file_path, include_dirs=None):
-        """纯 Python 实现：递归读取并展开 /include/ "xxxx.dtsi" 行"""
-        include_dirs = include_dirs or ["."]
-        main_dir = os.path.dirname(os.path.abspath(file_path))
-        if main_dir not in include_dirs:
-            include_dirs.insert(0, main_dir)
-
+        self.dnode = OpenDeviceTreeNode("mynode")
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+            self.content = f.read()
+            
+        # self.content = re.sub("#include","/include/", self.content, flags=re.M)
+        self.content = unicodedata.normalize("NFKC", self.content)
+        self.content = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", self.content)
+        self.content = re.sub(r"[\u200b-\u200d\ufeff\u200e\u200f\u202a-\u202e]", "", self.content)
+        self.content = self.content.replace("\r\n", "\n").replace("\r", "\n")
+        self.content = "\n".join([line.rstrip() for line in self.content.splitlines()])
 
-        # 匹配 /include/ "filename.dtsi"
-        include_pattern = r'/include/\s*"([^"]+)"'
+    def find_includes(self):
+        include_pattern = re.compile(r'(?:#include|/include/)\s+["<](?P<filepath>[^">]+)["<]')
 
-        def replace_match(match):
-            inc_filename = match.group(1)
-            # 在所有 include 路径中寻找该文件
-            for d in include_dirs:
-                full_path = os.path.join(d, inc_filename)
-                if os.path.exists(full_path):
-                    # 递归展开子文件
-                    return merge_dts_includes(full_path, include_dirs)
-            raise FileNotFoundError(f"无法在路径列表中找到 include 文件: {inc_filename}")
+        includes = re.findall(include_pattern, self.content)
+        for i in includes:
+            print(i)
 
-        # 循环替换，直到没有任何 /include/ 关键字
-        while re.search(include_pattern, content):
-            content = re.sub(include_pattern, replace_match, content)
+    
 
-        # 顺便洗掉阻碍解析的 # 开头的宏指令
-        content = re.sub(r"^\s*#.*$", "", content, flags=re.MULTILINE)
-        return content
+if __name__ == "__main__":
+    # file_path = Path.cwd() / "../devicetree/rk3399-eaidk-610.dts"
+    file_path = Path.cwd() / "devicetree/test.dts"
+    print(file_path)
+    dt = OpenDeviceTree(file_path)
+    dt.find_includes()
+
+    # 调试：打印前 10 行并带上行号，看看第 3 行到底是什么
+    for i, line in enumerate(dt.content.splitlines()[:15], 1):
+        print(f"Line {i}: {repr(line)}")
+
+    dt1 = dtlib.DT(dt.content)
+
+    root_node = dt.root
+    print("Root Node:", root_node)
 
 
-    # ================= 使用方法 =================
-    # 1. 展开所有 include 并获取干净的完整 DTS 文本
-    full_dts_text = merge_dts_includes("main_board.dts", include_dirs=["."])
 
-    # 2. 直接用 pydevicetree 解析，无需依赖 libfdt 和 dtc 工具！
-    tree = Devicetree.parseString(full_dts_text)
+
