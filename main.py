@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
 
         # Establish cross-module signal communications
         self.file_tree.file_double_clicked.connect(self.mdi_manager.load_file_content)
-        self.file_tree.file_double_clicked.connect(self.device_tree.load_dts_file)
+        self.file_tree.file_double_clicked.connect(self.device_tree.refresh_view)
         self.mdi_manager.file_loaded.connect(self.update_window_title)
 
     def update_window_title(self, file_path):
