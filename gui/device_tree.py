@@ -45,7 +45,7 @@ class CustomDeviceTreeView(QWidget):
         从设备树中提取最新的 qt_model 并同步到 QTreeView 上
         """
         # 1. 重新从虚拟属性获取最新的 Model 实例
-        self.model = OpenDeviceTree(file_path).main_node.qt_model
+        self.model = OpenDeviceTree(file_path).root_node.qt_model
         
         # 2. 💡 动态覆盖/定制当前组件需要的表头名称
         # 如果你想保持你在类属性里定义的3列，那就不要改；如果想强行改成 2 列，需要确保底层数据列数匹配

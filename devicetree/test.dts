@@ -1,7 +1,7 @@
 /dts-v1/;
 
-#include "devicetree/rk3399.dtsi"
-#include "devicetree/rk3399-opp.dtsi"
+#include "rk3399.dtsi"
+#include "rk3399-opp.dtsi"
 
 / {
     #address-cells = <1>;
