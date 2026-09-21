@@ -2,7 +2,7 @@ import os
 import re, tempfile
 from devicetree import dtlib
 from pathlib import Path
-from lib.dnode import OpenDeviceTreeNode
+from lib.dmanager import OpenDeviceTreeManager
 
 class OpenDeviceTree:
     def __init__(self, filepath=None):
@@ -15,18 +15,18 @@ class OpenDeviceTree:
             self.content = dts.read()
     
     @property
-    def main_node(self):
+    def main_tree(self):
         """
         dts文件构建的节点树
         """
-        node = OpenDeviceTreeNode().from_dts_text(self.content)
+        node = OpenDeviceTreeManager().from_dts_text(self.content)
         return node
         
     def set_include_dirs(self, include_paths = None):
-        return
+        pass
 
     @property
-    def other_nodes(self):
+    def other_trees(self):
         """
         include文件构建的节点树
         """
@@ -46,47 +46,23 @@ class OpenDeviceTree:
             for i in includes:
                 print(i)
                 file = find_file(i)
-                with open(file, "r", encoding="utf-8") as dtsi:
-                    node = OpenDeviceTreeNode.from_dts_text(dtsi.read())
-                nodes.append(node)
+                if file:
+                    try:
+                        with open(file, "r", encoding="utf-8") as dtsi:
+                            node = OpenDeviceTreeManager.from_dts_text(dtsi.read())
+                        nodes.append(node)
+                    except Exception as e:
+                        print(f"File not found: {e}")
 
             return nodes
         else:
             return None
     @property
-    def root_node(self):
-        root = OpenDeviceTreeNode.merge_trees(self.main_node, self.other_nodes) if self.other_nodes == None else self.main_node
+    def root_tree(self):
+        root = OpenDeviceTreeManager.trees_merge(self.main_tree, self.other_trees) if self.other_trees != None else self.main_tree
         return root
 
-if __name__ == "__main__":
-    dts_file_path = Path.cwd() / "devicetree/rk3399-eaidk-610.dts"
-    # dts_file_path = Path.cwd() / "../devicetree/rk3399.dtsi"
-    # dts_file_path = Path.cwd() / "../devicetree/test.dts"
-    # dts_file_path = Path.cwd() / "../devicetree/xl.dts"
-    include_folders = None 
-    print(dts_file_path)
-    dt = OpenDeviceTree(dts_file_path)
-    try:
-        # for node in dt.main_node.nodes:
-        #     print(f"Name: {node.name}; Label: {node.label}; Property: {len(node.properties)} as follow: {node.properties}")
-        # node = dt.main_node.find_node("aliases")
-        # for key, val in node.properties.items():
-        #     print(f"{key} = {val}")
-        for node in dt.other_nodes:
-            print(f"Name: {node.name}")
-            # print(f"Name: {node.name}; Label: {node.label}; Property: {len(node.properties)} as follow: {node.properties}")
-            node1 = node.find_node("aliases")
-            if node1:
-                for key, val in node1.properties.items():
-                    print(f"{key} = {val}")
-                
-        aliases = dt.root_node.find_node("aliases")
-        for key, val in aliases.properties.items():
-            print(f"{key} = {val}")
-
-    except Exception as e:
-        print(f"❌ 运行失败: {e}")
-
-
-
-
+    @property
+    def sub_tree(self):
+        clean_tree = OpenDeviceTreeManager.clean_phandle(self.main_tree)
+        return OpenDeviceTreeManager.trees_devide(clean_tree, self.other_trees) if self.other_trees != None else self.main_tree

@@ -1,5 +1,8 @@
 /dts-v1/;
 
+#include "rk3399.dtsi"
+#include "rk3399-opp.dtsi"
+
 / {
 	compatible = "rockchip,android\0rockchip,rk3399-excavator-edp\0rockchip,rk3399";
 	interrupt-parent = <0x01>;

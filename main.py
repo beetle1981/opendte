@@ -1,5 +1,5 @@
 import sys
-from PySide6.QtWidgets import QApplication, QMainWindow, QSplitter
+from PySide6.QtWidgets import QMdiSubWindow, QApplication, QMainWindow, QSplitter, QTableView, QHeaderView, QAbstractItemView
 from PySide6.QtCore import Qt
 import os
 
@@ -21,13 +21,15 @@ class MainWindow(QMainWindow):
         self.file_tree = CustomFileTreeView()
         self.device_tree = CustomDeviceTreeView()
         self.mdi_manager = MdiManagerArea()
+        self.property_table = QTableView()
         
         # Assemble UI layout using QSplitter
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_splitter.addWidget(self.file_tree)    # Left Column
-        main_splitter.addWidget(self.device_tree)    # Center Column
-        main_splitter.addWidget(self.mdi_manager)  # Right Column
-        main_splitter.setSizes([250, 250, 600])         # Initial column widths
+        main_splitter.addWidget(self.mdi_manager)    # Center Column
+        main_splitter.addWidget(self.device_tree)  # Right Column
+        main_splitter.addWidget(self.property_table) #Right Column2
+        main_splitter.setSizes([150, 500, 200, 250])         # Initial column widths
         self.setCentralWidget(main_splitter)
 
         # Initialize and attach the menu bar
@@ -35,8 +37,25 @@ class MainWindow(QMainWindow):
 
         # Establish cross-module signal communications
         self.file_tree.file_double_clicked.connect(self.mdi_manager.load_file_content)
-        self.file_tree.file_double_clicked.connect(self.device_tree.refresh_view)
+        # self.mdi_manager.subWindowActivated.connect(self.device_tree.refresh_view)
         self.mdi_manager.file_loaded.connect(self.update_window_title)
+        self.device_tree.node_selected.connect(self.show_node_properties)
+
+        # self.mdi_manager.subWindowActivated.connect(self.mdi_manager.on_sub_window_activated)
+        self.mdi_manager.file_loaded.connect(self.device_tree.refresh_view)       
+
+    def show_node_properties(self, node):
+        """接收被点击的物理节点对象，生成表格模型并刷新视图"""
+        if node:
+            # 1. 动态生成与该节点绑定的属性表格模型
+            table_model = node.properties_qt_model
+            
+            # 2. 直接绑定给右侧的 TableView，界面自动刷新
+            self.property_table.setModel(table_model)
+            self.property_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents) # 先整体自适应
+            self.property_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            # 🌟 核心：彻底禁用所有编辑触发行为（如双击、回车等），使表格变为只读
+            self.property_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
     def update_window_title(self, file_path):
         file_name = os.path.basename(file_path)
