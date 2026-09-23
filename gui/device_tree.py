@@ -4,7 +4,6 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QTreeView, QVBoxLayout, QWidget, QMenu, QMessageBox, QHeaderView
 from PySide6.QtCore import Signal, Qt, QPoint
 from lib.odtlib import OpenDeviceTree
-from lib.dnode import OpenDeviceTreeNode
 
 class CustomDeviceTreeView(QWidget):
     # 声明文件加载成功的信号
@@ -14,7 +13,6 @@ class CustomDeviceTreeView(QWidget):
     def __init__(self, dts_file_path=None, parent=None):
         super().__init__(parent)
         self.filepath = dts_file_path
-        node_selected = Signal(object)
         
         # 1. 统一布局管理
         layout = QVBoxLayout(self)

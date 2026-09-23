@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import QMenuBar, QFileDialog, QMdiArea
 from PySide6.QtGui import QAction, QKeySequence, QActionGroup
-from PySide6.QtCore import Signal, QDir
+from PySide6.QtCore import Signal, QDir, Qt
 from gui.theme import apply_dark_theme, apply_light_theme, apply_gold_theme
+from gui.settings import CustomSettingsManager
 
 class CustomMenuBar:
     def __init__(self, main_window):
@@ -22,6 +23,7 @@ class CustomMenuBar:
         self.create_view_menu()
         self.create_window_menu()
         self.create_theme_menu()
+        self.create_tools_menu()
 
         # 统一配置启动时的默认选中与显隐状态
         self.init_default_state()
@@ -223,3 +225,14 @@ class CustomMenuBar:
     def trigger_tile(self):
         """执行平铺并保持状态"""
         self.main_win.mdi_manager.tileSubWindows()
+
+    def create_tools_menu(self):
+        tools_menu = self.menu_bar.addMenu("&Tools")
+
+        # Undo Action
+        config_action = QAction("Conf（设置）", self.main_win)
+        config_action.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_S))
+        config_action.triggered.connect(self.main_win.settings_manager.open_settings_dialog)
+        tools_menu.addAction(config_action)
+
+        

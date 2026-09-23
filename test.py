@@ -10,9 +10,16 @@ if __name__ == "__main__":
     # dts_file_path = Path.cwd() / "../devicetree/test.dts"
     # dts_file_path = Path.cwd() / "../devicetree/xl.dts"
     include_folders = None 
-    print(dts_file_path)
     dt = OpenDeviceTree(dts_file_path)
+    print(f"DTS File Path: {dt.file_path}\nKernel Path: {dt.kernelpath}")
     try:
+        base_dir = dt.base_dir
+        raw_includes = dt.all_raw_includes
+        header_paths = dt.dts_headers
+        for key, val in dt.dts_defines.items():
+            print(f"Alias: {key} -> {val}")
+        # print(f"Base DIR: {base_dir};\nRAW Includes: {raw_includes};\nDTSi Includes: {dt.dts_includes};\nDTS Headers: {dt.dts_headers}")
+
         # test main_tree
         # for node in dt.main_tree.nodes:
         #     print(f"Name: {node.name}; Label: {node.label}; Property: {len(node.properties)} as follow: {node.properties}")
@@ -21,7 +28,7 @@ if __name__ == "__main__":
         #     print(f"Property: {key} = {val}")
 
         #test phandle
-        dt.main_tree
+        # print(f"Main Tree: {len(dt.main_tree.nodes)} nodes; Root Tree: {len(dt.root_tree.nodes)} nodes; Gap: {len(dt.root_tree.nodes) - len(dt.main_tree.nodes)}")
 
     except Exception as e:
         print(f"❌ 运行失败: {e}")

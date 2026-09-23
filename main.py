@@ -1,12 +1,13 @@
-import sys
+import sys, os
 from PySide6.QtWidgets import QMdiSubWindow, QApplication, QMainWindow, QSplitter, QTableView, QHeaderView, QAbstractItemView
-from PySide6.QtCore import Qt
-import os
+from PySide6.QtCore import Qt, QSettings
 
 from gui.file_tree import CustomFileTreeView
 from gui.menu_bar import CustomMenuBar
 from gui.mdi_area import MdiManagerArea
 from gui.device_tree import CustomDeviceTreeView
+from gui.settings import CustomSettingsManager
+from gui.header import CustomTableView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -16,33 +17,43 @@ class MainWindow(QMainWindow):
 
         # Enable the status bar at the bottom
         self.statusBar()
+        self.settings_manager = CustomSettingsManager(self)
+        # self.settings_manager.refresh_ui()
 
         # Instantiate sub-components
         self.file_tree = CustomFileTreeView()
         self.device_tree = CustomDeviceTreeView()
         self.mdi_manager = MdiManagerArea()
         self.property_table = QTableView()
+        self.defines_table = CustomTableView()
+
+        left_vertical_splitter = QSplitter(Qt.Orientation.Vertical)
+        left_vertical_splitter.addWidget(self.file_tree)
+        left_vertical_splitter.addWidget(self.defines_table)
+        left_vertical_splitter.setSizes([250, 350])
         
         # Assemble UI layout using QSplitter
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_splitter.addWidget(self.file_tree)    # Left Column
+        main_splitter.addWidget(left_vertical_splitter)    # Left Column
         main_splitter.addWidget(self.mdi_manager)    # Center Column
         main_splitter.addWidget(self.device_tree)  # Right Column
         main_splitter.addWidget(self.property_table) #Right Column2
         main_splitter.setSizes([150, 500, 200, 250])         # Initial column widths
         self.setCentralWidget(main_splitter)
 
-        # Initialize and attach the menu bar
+        # Initialize and attach the menu bar, settings
         self.menu_manager = CustomMenuBar(self)
 
         # Establish cross-module signal communications
         self.file_tree.file_double_clicked.connect(self.mdi_manager.load_file_content)
         # self.mdi_manager.subWindowActivated.connect(self.device_tree.refresh_view)
         self.mdi_manager.file_loaded.connect(self.update_window_title)
-        self.device_tree.node_selected.connect(self.show_node_properties)
-
         # self.mdi_manager.subWindowActivated.connect(self.mdi_manager.on_sub_window_activated)
-        self.mdi_manager.file_loaded.connect(self.device_tree.refresh_view)       
+        self.mdi_manager.file_loaded.connect(self.device_tree.refresh_view)
+        self.mdi_manager.file_loaded.connect(self.defines_table.refresh_view) 
+
+        self.device_tree.node_selected.connect(self.show_node_properties)      
+
 
     def show_node_properties(self, node):
         """接收被点击的物理节点对象，生成表格模型并刷新视图"""

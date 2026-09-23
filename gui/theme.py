@@ -124,63 +124,67 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPalette, QColor
 
 def apply_gold_theme():
-    """动态注入独家定制：黑金奢华科技主题 (Gold Theme)"""
+    """动态注入独家定制：深墨绿底黄金字奢华科技主题 (Gold Theme - Dark Emerald Edition)"""
     app = QApplication.instance()
     if not app: return
     
-    # 1. 深度配置黑金底层调色板
+    # ----------------------------------------------------
+    # 1. 深度配置底层调色板（背景替换为深墨绿，文字完全恢复最开始的金色）
+    # ----------------------------------------------------
     palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(25, 25, 25))          # 窗口背景：深曜石黑
-    palette.setColor(QPalette.WindowText, QColor(230, 210, 180))   # 文字：香槟淡金
-    palette.setColor(QPalette.Base, QColor(18, 18, 18))            # 内容区背景：极深黑
-    palette.setColor(QPalette.AlternateBase, QColor(25, 25, 25))
-    palette.setColor(QPalette.Text, QColor(230, 210, 180))
-    palette.setColor(QPalette.Button, QColor(40, 36, 30))          # 按钮带有微微古铜色暗影
-    palette.setColor(QPalette.ButtonText, QColor(212, 175, 55))    # 按钮文字：黄金色
-    palette.setColor(QPalette.Highlight, QColor(212, 175, 55))      # 🌟 激活高亮色：奢华沙滩金 (#D4AF37)
-    palette.setColor(QPalette.HighlightedText, QColor(18, 18, 18))  # 选中时文字反色为极深黑
+    palette.setColor(QPalette.Window, QColor(10, 35, 18))          # 窗口背景：深墨绿
+    palette.setColor(QPalette.WindowText, QColor(230, 210, 180))   # 🌟 恢复最开始：文字香槟淡金
+    palette.setColor(QPalette.Base, QColor(5, 20, 10))             # 内容区背景：极深墨绿
+    palette.setColor(QPalette.AlternateBase, QColor(10, 35, 18))
+    palette.setColor(QPalette.Text, QColor(230, 210, 180))          # 🌟 恢复最开始：输入框/表格文本香槟淡金
+    palette.setColor(QPalette.Button, QColor(20, 50, 28))          # 按钮带有微弱墨绿暗影
+    palette.setColor(QPalette.ButtonText, QColor(212, 175, 55))    # 🌟 恢复最开始：按钮文字黄金色
+    palette.setColor(QPalette.Highlight, QColor(212, 175, 55))      # 🌟 恢复最开始：激活高亮沙滩金 (#D4AF37)
+    palette.setColor(QPalette.HighlightedText, QColor(5, 20, 10))   # 选中时文字反色为极深墨绿
     app.setPalette(palette)
 
-    # 2. 注入黑金语义化全局 QSS 样式表
+    # ----------------------------------------------------
+    # 2. 注入全局 QSS 样式表（全面翻新背景为深墨绿系列，完全继承最开始的黑金语法层级）
+    # ----------------------------------------------------
     gold_qss = """
-    QMainWindow, QStatusBar { background-color: #191919; color: #E6D2B4; }
-    QSplitter::handle { background-color: #332F28; }
+    QMainWindow, QStatusBar { background-color: #0A2312; color: #E6D2B4; }
+    QSplitter::handle { background-color: #1A3E24; }
     QSplitter::handle:horizontal { width: 2px; }
     QSplitter::handle:vertical { height: 2px; }
     
     QTreeView, QTableView, QTextEdit { 
-        background-color: #121212; color: #E6D2B4; border: 1px solid #332F28; gridline-color: #22201C; 
+        background-color: #05140A; color: #E6D2B4; border: 1px solid #1A3E24; gridline-color: #0F301A; 
     }
-    /* 单击聚焦时保持黑金边框，不出现蓝色框 */
+    /* 单击聚焦时保持深绿线条，不出现蓝色框 */
     QTreeView:focus, QTableView:focus, QTextEdit:focus { 
-        border: 1px solid #332F28; 
+        border: 1px solid #1A3E24; 
         outline: none;
     }
     
     /* 表头高亮黄金色文字 */
-    QHeaderView::section { background-color: #22201C; color: #D4AF37; border: 1px solid #332F28; padding: 5px; qproperty-alignment: AlignCenter; }
+    QHeaderView::section { background-color: #0F301A; color: #D4AF37; border: 1px solid #1A3E24; padding: 5px; qproperty-alignment: AlignCenter; }
     
-    /* MDI 子窗体标题栏黑金高亮 */
-    QMdiSubWindow { border: 1px solid #332F28; }
-    QMdiSubWindow:active { qproperty-windowTitleBackgroundColor: #544634; qproperty-windowTitleTextColor: #D4AF37; }
-    QMdiSubWindow:!active { qproperty-windowTitleBackgroundColor: #22201C; qproperty-windowTitleTextColor: #888070; }
+    /* MDI 子窗体标题栏深墨绿高亮 */
+    QMdiSubWindow { border: 1px solid #1A3E24; }
+    QMdiSubWindow:active { qproperty-windowTitleBackgroundColor: #133D1F; qproperty-windowTitleTextColor: #D4AF37; }
+    QMdiSubWindow:!active { qproperty-windowTitleBackgroundColor: #0F301A; qproperty-windowTitleTextColor: #888070; }
     
     /* 选项卡高亮 */
-    QTabBar::tab { background-color: #22201C; color: #888070; padding: 6px 14px; border: 1px solid #332F28; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; }
-    QTabBar::tab:selected { background-color: #D4AF37; color: #121212; border-color: #D4AF37; font-weight: bold; }
-    QTabBar::tab:hover:!selected { background-color: #332F28; color: #D4AF37; }
+    QTabBar::tab { background-color: #0F301A; color: #888070; padding: 6px 14px; border: 1px solid #1A3E24; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; }
+    QTabBar::tab:selected { background-color: #D4AF37; color: #05140A; border-color: #D4AF37; font-weight: bold; }
+    QTabBar::tab:hover:!selected { background-color: #1A3E24; color: #D4AF37; }
     
-    /* 顶层菜单栏与下拉菜单黑金质感 */
-    QMenuBar { background-color: #191919; color: #E6D2B4; border-bottom: 1px solid #332F28; }
+    /* 顶层菜单栏与下拉菜单深墨绿质感 */
+    QMenuBar { background-color: #0A2312; color: #E6D2B4; border-bottom: 1px solid #1A3E24; }
     QMenuBar::item { background: transparent; padding: 4px 10px; color: #E6D2B4; }
-    QMenuBar::item:selected { background-color: #2A2620; color: #D4AF37; }
-    QMenu { background-color: #191919; color: #E6D2B4; border: 1px solid #332F28; padding: 4px; }
-    QMenu::item:selected { background-color: #D4AF37; color: #121212; }
-    QMenu::separator { height: 1px; background-color: #332F28; margin: 4px 0px; }
+    QMenuBar::item:selected { background-color: #133D1F; color: #D4AF37; }
+    QMenu { background-color: #0A2312; color: #E6D2B4; border: 1px solid #1A3E24; padding: 4px; }
+    QMenu::item:selected { background-color: #D4AF37; color: #05140A; }
+    QMenu::separator { height: 1px; background-color: #1A3E24; margin: 4px 0px; }
     
-    QScrollBar:vertical { border: none; background: #191919; width: 8px; }
-    QScrollBar::handle:vertical { background: #4F473A; border-radius: 4px; }
-    QScrollBar::handle:vertical:hover { background: #6E6351; }
+    QScrollBar:vertical { border: none; background: #0A2312; width: 8px; }
+    QScrollBar::handle:vertical { background: #1C4D29; border-radius: 4px; }
+    QScrollBar::handle:vertical:hover { background: #266B39; }
     """
     app.setStyleSheet(gold_qss)
 
