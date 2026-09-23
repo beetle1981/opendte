@@ -62,6 +62,11 @@ class CustomMenuBar:
 
         file_menu.addSeparator()
 
+        close_all_action = QAction("Close all...", self.main_win)
+        close_all_action.setShortcut("Alt+shift+F4")
+        close_all_action.triggered.connect(self.main_win.mdi_manager.close_all_documents)
+        file_menu.addAction(close_all_action)
+
         # Exit Action
         exit_action = QAction("Exit", self.main_win)
         exit_action.setShortcut("Alt+F4")

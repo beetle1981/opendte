@@ -1,9 +1,28 @@
 import re
+from lib.odtlib import OpenDeviceTree
 from lib.dnode import OpenDeviceTreeNode
 
-class OpenDeviceTreeManager(OpenDeviceTreeNode):
-    @classmethod
-    def trees_merge(cls, main_tree, other_trees: list):
+class OpenDeviceTreeManager(OpenDeviceTree):
+    def __init__(self, filepath=None):
+        super().__init__(filepath)
+        
+
+    @property
+    def new_tree(self):
+        """对主树进行树合并或分离导出的结构树"""
+        if self.dts_includes:
+            if self.main_tree_has_phandle:
+                print(f"DEBUG: main tree has includes and phandle.")
+                self.main_tree = self.trees_devide()
+                return self.main_tree
+            else:
+                print(f"DEBUG: main tree has includes and has NO phandle.")
+                return self.trees_merge()
+        else:
+            print(f"DEBUG: main tree has NO includes.")
+            return self.main_tree
+
+    def trees_merge(self) -> OpenDeviceTreeNode:
         """
         核心树合并算法：在物理内存中直接将主树和多个独立子树深度合并为一棵全新的 root_node 大树。
         💡 策略：
@@ -12,7 +31,7 @@ class OpenDeviceTreeManager(OpenDeviceTreeNode):
         3. 处理所有以 & 开头的引用节点，利用全局标签注册表重定向合并到真实的物理节点中。如果找不到对应物理节点就保留，不跳过。
         """
         # 创建一个绝对干净的终极总根节点
-        final_root = cls("/")
+        final_root = OpenDeviceTreeNode("/")
 
         # 1. 全局标签注册表：用于将 label 映射到 final_root 中的真实合并后节点路径
         label_to_path_registry = {}
@@ -104,162 +123,218 @@ class OpenDeviceTreeManager(OpenDeviceTreeNode):
         # === 执行合并流水线 ===
         
         # 步骤一：收集主树和所有独立子树的标签映射关系
-        collect_labels(main_tree)
-        for tree in other_trees:
+        collect_labels(self.main_tree)
+        for tree in self.other_trees:
             collect_labels(tree)
             
         # 步骤二：合并主树和所有子树的物理节点到 final_root
-        merge_physical_nodes(main_tree)
-        for tree in other_trees:
+        merge_physical_nodes(self.main_tree)
+        for tree in self.other_trees:
             merge_physical_nodes(tree)
             
         # 步骤三：解析并重定向合并所有树中的引用节点（找不到则原地作为普通节点保留）
-        merge_reference_nodes(main_tree)
-        for tree in other_trees:
+        merge_reference_nodes(self.main_tree)
+        for tree in self.other_trees:
             merge_reference_nodes(tree)
 
         return final_root
 
-    @classmethod
-    def trees_devide(cls, root_tree, other_trees: list):
+    def trees_devide(self) -> 'OpenDeviceTreeNode':
         """
-        核心树逆向拆分算法：将深度合并后的终极总大树（root_tree），
-        根据各个 include 子树（other_trees）的初始物理骨架，拆分回各自独立的文件节点状态，
-        并提取出原本属于主树（main_tree）的独有节点和覆盖属性。
-        
-        返回值：
-          main_tree: 一个全新的、属于主文件的 OpenDeviceTreeNode 树
+        对主树进行结构树分离导出，清理引用并转化为标准编译器语法格式
         """
-        # 1. 创建全新的干净主树根节点
-        main_tree = cls("/")
-        
-        # 2. 建立各 include 子树的物理路径和 Label 注册表字典
-        # 格式: { "/soc/i2c@40003000": other_tree_obj, ... }
-        path_to_include_tree_map = {}
-        # 记录所有的 include 子树中曾经拥有过的 label 集合，以便主树提炼 &label 覆盖块
-        include_labels_registry = {}
+        print("\n" + "="*60)
+        print("DEBUG: [trees_devide] 启动设备树高级差分与分离算法")
+        print("="*60)
 
-        def build_include_maps(source_node, belonging_tree):
-            if not source_node or source_node.name.startswith('&'):
-                return
+        # 🚀 统一局部变量引用，确保整个生命周期内数据源对齐
+        main_tree = self.main_tree
+        other_trees = self.other_trees if self.other_trees is not None else []
+
+        # --------------------------------------------------------------------
+        # 内部路径检索辅助函数：在 include 树列表中寻找相同路径的节点
+        # --------------------------------------------------------------------
+        def find_node_by_path_in_includes(path: str) -> 'OpenDeviceTreeNode | None':
+            for o_tree in other_trees:
+                node = find_node_recursive(o_tree, path)
+                if node: return node
+            return None
+
+        def find_node_recursive(current_node, target_path):
+            if not current_node: return None
+            if getattr(current_node, 'path', '') == target_path:
+                return current_node
+            # 🚀 核心适配：使用 .values() 遍历字典里的子节点实体，防止遍历出键名字符串
+            for child in getattr(current_node, 'children', {}).values():
+                found = find_node_recursive(child, target_path)
+                if found: return found
+            return None
+
+        # --------------------------------------------------------------------
+        # step1: main_tree 从 include 里恢复节点标签，Debug 输出
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 1] 开始从 include 树列表中恢复 main_tree 的标签映射...")
+        def recover_labels_recursive(node):
+            if not node: return
+            node_path = getattr(node, 'path', '')
             
-            # 建立绝对路径到它所属的 include 树对象的映射
-            path_to_include_tree_map[source_node.path] = belonging_tree
-            if source_node.label:
-                # 记录这个 label 原本属于哪一个绝对路径
-                include_labels_registry[source_node.label] = source_node.path
-                
-            for child in source_node.children.values():
-                build_include_maps(child, belonging_tree)
-
-        # 扫描并初始化所有包含文件的路径图谱
-        for sub_tree in other_trees:
-            # 清空这些作为模板的 include 树的老属性，准备接收大树融合后的最新值
-            # 注意：如果您只想提取主树，不想修改传入的 other_trees 实例，
-            # 可以对 other_trees 先行做深拷贝，或者让此函数只返回 main_tree
-            build_include_maps(sub_tree, sub_tree)
-
-        # 3. 辅助函数：根据路径创建或寻回节点
-        def get_or_create_node_by_path(target_root, absolute_path: str):
-            if absolute_path == "/":
-                return target_root
-            parts = [p for p in absolute_path.split('/') if p]
-            curr = target_root
-            for part in parts:
-                curr = curr.add_child(part)
-            return curr
-
-        # 4. 深度扫描融合大树（root_tree），进行按路分流
-        def distribute_nodes(merged_node):
-            if not merged_node or merged_node.name.startswith('&'):
-                return
-
-            current_path = merged_node.path
-            
-            # 检查大树中的这个路径，原本属于哪个 include 文件
-            belonging_include_tree = path_to_include_tree_map.get(current_path)
-
-            if belonging_include_tree:
-                # ------ 情况 A：这个节点原本就是 include 文件长出来的骨架 ------
-                # 寻找或在对应的包含树中构建相同的路径节点
-                inc_target_node = get_or_create_node_by_path(belonging_include_tree, current_path)
-                
-                # 将融合大树中的最新属性同步回包含树节点
-                inc_target_node.properties = merged_node.properties.copy()
-                if merged_node.label:
-                    inc_target_node.label = merged_node.label
-                
-                # 💡 【关键重构思想】：如果大树里某些属性被修改了，且您希望主文件保留覆写痕迹
-                # 您可以在这里对比 merged_node.properties 与 sub_tree 的初始快照差集（如有必要）
+            inc_node = find_node_by_path_in_includes(node_path)
+            if inc_node and getattr(inc_node, 'label', None):
+                node.label = inc_node.label
+                print(f"       [Label恢复] 路径: {node_path} -> 从 include 树成功同步标签: '{node.label}'")
             else:
-                # ------ 情况 B：这个路径在所有 include 文件中都从未出现过 ------
-                # 说明这是主文件（main_tree）独自在根目录下开辟的全新物理物理节点
-                if current_path != "/":
-                    main_target_node = get_or_create_node_by_path(main_tree, current_path)
-                    main_target_node.properties = merged_node.properties.copy()
-                    if merged_node.label:
-                        main_target_node.label = merged_node.label
-
-            # 递归向下分流所有子孙
-            for child in list(merged_node.children.values()):
-                distribute_nodes(child)
-
-        # 执行骨架分流
-        distribute_nodes(root_tree)
-
-        # 5. 【高阶提炼】：主文件覆盖块提炼（&label）
-        # 在 DTS 中，主文件经常通过 `&i2c0 { status = "okay"; };` 来修改 include 里的属性。
-        # 上面的分流会将最新属性同步给 include，但为了让导出的 main_tree 拥有这些覆写痕迹，
-        # 我们检查大树中的属性，并为主树生成对应的 &label 覆盖块。
-        for label_name, orig_phys_path in include_labels_registry.items():
-            # 从融合大树中拿到最新的实时物理节点
-            merged_phys_node = root_tree.find_node(label=label_name)
-            if merged_phys_node:
-                # 创建一个形如 &i2c0 的新临时节点挂在主树的根节点下
-                ref_node_name = f"&{label_name}"
-                
-                # 提炼出主树在该引用块中追加或覆写的属性
-                # （如果您有初始备份，可以作 Diff 差集提炼；若无，则将最新状态做引用挂载）
-                ref_node = main_tree.add_child(ref_node_name)
-                ref_node.properties = merged_phys_node.properties.copy()
-
-        return main_tree
-
-    @classmethod
-    def clean_phandle(cls, root_tree: "OpenDeviceTreeNode") -> "OpenDeviceTreeNode":
-        """
-        核心重构算法：全局深度遍历整棵树，提取 phandle 的值赋给节点的 label，然后物理清除该 phandle 属性。
-        💡 策略：
-          1. 遍历 root_tree 下的所有物理节点。
-          2. 如果节点拥有 phandle 属性，清洗其括号（如 <0x1> 提取为 0x1），并将其设置为该节点的最新 label。
-          3. 安全移除 'phandle' 和 'linux,phandle'。
-        """
-        if not root_tree:
-            return root_tree
-
-        # 🚀 利用节点自带的 traverse() 一键深度优先扫描全树
-        for node in root_tree.traverse():
-            # 跳过临时引用节点，只处理正常的物理树节点
-            if node.name.startswith('&'):
-                continue
-                
-            # 1. 尝试寻找 phandle 的值
-            phandle_val = None
-            for key in ('phandle', 'linux,phandle'):
-                if key in node.properties:
-                    phandle_val = node.properties[key]
-                    # 顺手删除该属性，完成清理工作
-                    del node.properties[key]
+                if getattr(node, 'label', None):
+                    print(f"       [Label保留] 路径: {node_path} -> 保持主树自有标签: '{node.label}'")
             
-            # 2. 如果找到了 phandle 的值，将其清洗并赋予 label
-            if phandle_val:
-                # 💡 容错清洗：去掉设备树常见的尖括号 `<...>` 以及前后的多余空格
-                # 例如：将 `<0x1>` 转换为 `0x1`，将 `< 1 >` 转换为 `1`
-                clean_label = re.sub(r'[<>\s]', '', str(phandle_val))
+            for child in getattr(node, 'children', {}).values():
+                recover_labels_recursive(child)
+
+        recover_labels_recursive(main_tree)
+        print("✔ DEBUG: [Step 1] 节点标签映射恢复完毕。")
+
+        # --------------------------------------------------------------------
+        # step2: main_tree 从 properties 中 phandle 或 linux phandle 提取值写入 phandle 属性，
+        #        然后从 properties 删除 phandle。添加 DEBUG 输出
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 2] 开始抽取属性中的 phandle/linux,phandle 至节点实体内部...")
+        def process_phandles_recursive(node):
+            if not node: return
+            properties = getattr(node, 'properties', {})
+            
+            target_key = None
+            if 'phandle' in properties:
+                target_key = 'phandle'
+            elif 'linux,phandle' in properties:
+                target_key = 'linux,phandle'
                 
-                if clean_label:
-                    node.label = clean_label
-                    print(f"DEBUG: 节点 [{node.path}] 已成功将 phandle 值转化为新 Label: {node.label}")
+            if target_key:
+                raw_value = properties[target_key]
+                print(f"       [Phandle抓取] 节点: {getattr(node, 'path', '')} | 发现内嵌属性 '{target_key}': {raw_value}")
+                
+                # 解包潜在的列表或单值转化为标准整型数据
+                phandle_val = raw_value[0] if isinstance(raw_value, list) else raw_value
+                node.phandle = phandle_val
+                
+                # 从字典中剔除
+                del properties[target_key]
+                print(f"       [Phandle改写] 成功擦除 properties['{target_key}']，并挂载至实体 node.phandle = {phandle_val}")
+            
+            for child in getattr(node, 'children', {}).values():
+                process_phandles_recursive(child)
 
-        return root_tree
+        process_phandles_recursive(main_tree)
+        print("✔ DEBUG: [Step 2] Phandle 实体属性提取与字典清洗完毕。")
 
+        # --------------------------------------------------------------------
+        # step3：找出有 phandle 值引用的属性，将对应引用值换成对应节点的标签的引用，添加 DEBUG 输出
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 3] 开始进行全局 phandle 引用向 Label 标签引用的全量值转换...")
+        
+        phandle_to_label_map = {}
+        def build_phandle_map(node):
+            if not node: return
+            p_val = getattr(node, 'phandle', None)
+            l_val = getattr(node, 'label', None)
+            if p_val and l_val:
+                phandle_to_label_map[p_val] = l_val
+            for child in getattr(node, 'children', {}).values():
+                build_phandle_map(child)
+                
+        build_phandle_map(main_tree)
+        for o_tree in other_trees:
+            build_phandle_map(o_tree)
+
+        def replace_references_recursive(node):
+            if not node: return
+            properties = getattr(node, 'properties', {})
+            
+            for prop_name, prop_val in list(properties.items()):
+                check_val = prop_val[0] if isinstance(prop_val, list) and len(prop_val) > 0 else prop_val
+                
+                if check_val in phandle_to_label_map:
+                    target_label = phandle_to_label_map[check_val]
+                    properties[prop_name] = f"&{target_label}"
+                    print(f"       [引用替换] 节点: {getattr(node, 'name', '')} | 属性 '{prop_name}': {prop_val} -> 成功映射为标签引用: &{target_label}")
+            
+            for child in getattr(node, 'children', {}).values():
+                replace_references_recursive(child)
+
+        replace_references_recursive(main_tree)
+        print("✔ DEBUG: [Step 3] 全局符号替换与标签解包映射完毕。")
+
+        # --------------------------------------------------------------------
+        # step4: main_tree 去除所有 include 含有的同名节点，相同值的属性，
+        #        最后将节点名改成 &label 引用节点。添加 debug 输出
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 4] 开始实施 include 树共有资产的差分裁剪与 &label 语法改造...")
+        def optimize_and_relabel_recursive(node):
+            if not node: return
+            node_path = getattr(node, 'path', '')
+            properties = getattr(node, 'properties', {})
+            
+            inc_node = find_node_by_path_in_includes(node_path)
+            if inc_node:
+                inc_props = getattr(inc_node, 'properties', {})
+                print(f"       [差分对比] 命中 include 同路径节点: {node_path}，启动属性裁剪...")
+                
+                for p_key in list(properties.keys()):
+                    if p_key in inc_props and properties[p_key] == inc_props[p_key]:
+                        del properties[p_key]
+                        print(f"              [属性剥离] 移除与 include 完全相同的冗余属性: '{p_key}'")
+
+            if getattr(node, 'label', None):
+                old_name = node.name
+                node.name = f"&{node.label}"
+                print(f"       [语法缩编] 节点路径: {node_path} | 名称 '{old_name}' -> 成功转换为引用格式: '{node.name}'")
+            else:
+                print(f"       [Step 4 清洗警告] 节点 '{getattr(node, 'name', '')}' 无可用 Label，保留原名")
+
+            for child in getattr(node, 'children', {}).values():
+                optimize_and_relabel_recursive(child)
+
+        optimize_and_relabel_recursive(main_tree)
+        print("✔ DEBUG: [Step 4] 冗余属性剥离与引用层级改写完毕。")
+
+        # --------------------------------------------------------------------
+        # step5：将所有的十六进制值换成十进制值， 添加 debug输出 (🚀 已完美补全截断)
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 5] 启动数据标准化：全局检索并将所有十六进制形式的数据转换为十进制...")
+        def convert_hex_to_dec_recursive(node):
+            if not node: return
+            properties = getattr(node, 'properties', {})
+            
+            for prop_name, prop_val in properties.items():
+                if isinstance(prop_val, str) and prop_val.lower().startswith('0x'):
+                    try:
+                        dec_val = int(prop_val, 16)
+                        properties[prop_name] = dec_val
+                        print(f"       [进制转换] 节点: {getattr(node, 'path', '')} | 属性 '{prop_name}': {prop_val} -> {dec_val}")
+                    except ValueError:
+                        pass
+                elif isinstance(prop_val, list):
+                    new_list = []
+                    has_changed = False
+                    for item in prop_val:
+                        if isinstance(item, str) and item.lower().startswith('0x'):
+                            try:
+                                new_list.append(int(item, 16))
+                                has_changed = True
+                            except ValueError:
+                                new_list.append(item)
+                        else:
+                            new_list.append(item)
+                    if has_changed:
+                        properties[prop_name] = new_list
+                        print(f"       [列表进制转换] 节点: {getattr(node, 'path', '')} | 属性 '{prop_name}' 内部元素已转十进制")
+
+            for child in getattr(node, 'children', {}).values():
+                convert_hex_to_dec_recursive(child)
+
+        convert_hex_to_dec_recursive(main_tree)
+        print("✔ DEBUG: [Step 5] 十六进制格式标准化过滤完毕。")
+        
+        print("\n" + "="*60)
+        print("DEBUG: [trees_devide] 设备树高级分离与反解流程顺利完成！")
+        print("="*60 + "\n")
+        
+        return main_tree

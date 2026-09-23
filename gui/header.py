@@ -84,7 +84,7 @@ class CustomTableView(QWidget):
         self.filepath = file_path
         # 1. 重新从虚拟属性获取最新的 Model 实例
         
-        self.model = self.convert_defines_dict_to_model(OpenDeviceTree(file_path).dts_defines)
+        self.model = self.convert_defines_dict_to_model(OpenDeviceTree(file_path).dts_defines) if file_path else QStandardItemModel()
         # 代理模型接管原始数据模型
         self.proxy_model.setSourceModel(self.model)
         # 自动优化列宽

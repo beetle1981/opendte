@@ -18,35 +18,6 @@ class MdiManagerArea(QMdiArea):
 
         self.subWindowActivated.connect(self.on_sub_window_activated)
 
-        # 🌟 完美的 QTabBar 激活蓝色背景、白色文字样式表
-        # tab_style = """
-        # QTabBar::tab {
-        #     background-color: #f0f0f0;  /* 未激活标签页的背景色 */
-        #     color: #333333;             /* 未激活标签页的文字颜色 */
-        #     padding: 8px 16px;          /* 标签页内边距 */
-        #     border: 1px solid #dcdfe6;
-        #     border-bottom: none;
-        #     border-top-left-radius: 4px;
-        #     border-top-right-radius: 4px;
-        #     min-width: 80px;
-        # }
-
-        # QTabBar::tab:selected {
-        #     background-color: #0078d7;  /* 🚀 核心：激活（选中）状态显示为经典蓝色 */
-        #     color: #ffffff;             /* 🚀 核心：激活（选中）状态文字显示为纯白色 */
-        #     border-color: #0078d7;
-        #     font-weight: bold;          /* 可选：加粗文字使其更明显 */
-        # }
-
-        # QTabBar::tab:hover:!selected {
-        #     background-color: #e6f7ff;  /* 可选：鼠标悬停在未选中标签上的颜色 */
-        # }
-        # """
-
-        # # 🌟 在你的 MdiManagerArea 初始化中应用它
-        # self.setStyleSheet(tab_style)
-
-
     def create_new_document(self):
         """新建一个文本文档子窗口"""
         text_edit = QTextEdit()
@@ -223,3 +194,87 @@ class MdiManagerArea(QMdiArea):
             # 可以在状态栏提示或短暂弹窗，这里简单处理
         except Exception as e:
             QMessageBox.warning(self, "错误", f"无法保存文件:\n{e}")
+
+    def close_all_documents(self):
+        """
+        🚀【外部调用接口】：一键安全关闭所有 QTextEdit 子窗口
+        """
+        # 逐个检查并关闭子窗口
+        for sub_window in self.subWindowList():
+            # 1. 临时将其切为活动窗口，增强视觉提示
+            self.setActiveSubWindow(sub_window)
+            
+            # 2. 调用单窗口检查，如果用户点击了“取消”，直接中断整个关闭链条
+            if not self.check_and_save_sub_window(sub_window):
+                print("用户中止了全部关闭流程")
+                return
+                
+            # 3. 检查通过（已存/无改动/选择不存），安全关闭当前子窗口
+            sub_window.close()
+        self.file_loaded.emit("")
+
+    # ----------------------------------------------------
+    # 其余原有的保存、撤销、激活等方法均保持不变...
+    # ----------------------------------------------------
+    def on_sub_window_activated(self, sub_window):
+        if not sub_window or isinstance(sub_window, str):
+            return
+        file_path = None
+        if hasattr(sub_window, 'filepath') and isinstance(sub_window.filepath, str):
+            file_path = sub_window.filepath
+        else:
+            try:
+                text_edit = sub_window.widget()
+                if text_edit and hasattr(text_edit, 'file_path') and isinstance(text_edit.file_path, str):
+                    file_path = text_edit.file_path
+                    sub_window.filepath = file_path  
+            except Exception:
+                pass  
+        if file_path and isinstance(file_path, str) and os.path.isfile(file_path):
+            self.file_loaded.emit(file_path)
+    def check_and_save_sub_window(self, sub_window) -> bool:
+            """
+            检查单个子窗口是否需要保存。
+            返回值: True 代表可以安全关闭（已保存、未修改或用户选择放弃）; False 代表用户点击了取消
+            """
+            if not sub_window:
+                return True
+                
+            text_edit = sub_window.widget()
+            if not isinstance(text_edit, QTextEdit):
+                return True
+
+            # 💡 利用 Qt 原生的 isModified() 机制判断文本是否被动过
+            if text_edit.document().isModified():
+                # 获取文档名称提示用户
+                doc_name = sub_window.windowTitle()
+                
+                # 弹出标准的“是/否/取消”确认提示框
+                reply = QMessageBox.question(
+                    self,
+                    "未保存的更改",
+                    f"文档 '{doc_name}' 已被修改，是否保存？",
+                    QMessageBox.StandardButton.Yes | 
+                    QMessageBox.StandardButton.No | 
+                    QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    # 走保存流程
+                    if text_edit.file_path is None:
+                        # 如果是新文件，弹出另存为对话框
+                        file_path, _ = QFileDialog.getSaveFileName(
+                            self, f"另存为 - {doc_name}", "", "文本文件 (*.txt);;所有文件 (*.*)"
+                        )
+                        if file_path:
+                            return self._write_to_file(file_path, text_edit, sub_window)
+                        return False  # 用户在另存为弹窗中点了取消
+                    else:
+                        # 已有文件，直接静默覆盖保存
+                        return self._write_to_file(text_edit.file_path, text_edit, sub_window)
+                        
+                elif reply == QMessageBox.StandardButton.Cancel:
+                    return False  # 用户中止了关闭流程
+                    
+            return True  # 未修改或用户明确点击了 "No"（不保存），允许安全关闭

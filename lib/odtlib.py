@@ -1,8 +1,7 @@
 import os
 import re, tempfile
-from devicetree import dtlib
+from lib.dnode import OpenDeviceTreeNode
 from pathlib import Path
-from lib.dmanager import OpenDeviceTreeManager
 from PySide6.QtCore import QSettings
 # from lib.header import HeaderAnalyzer
 
@@ -35,8 +34,32 @@ class OpenDeviceTree:
     def main_tree(self):
         """dts 文件构建的节点主树"""
         # 💡 注意：确保 from_dts_text 是实例方法还是类方法，如果是类方法建议用类名调用
-        node = OpenDeviceTreeManager().from_dts_text(self.content)
+        node = OpenDeviceTreeNode.from_dts_text(self.content)
         return node
+
+    @property
+    def main_tree_has_phandle(self) -> bool:
+        """
+        🚀【新实现】：安全清洗注释后，搜寻 self.content 中是否包含有效的 phandle 属性
+        """
+        if not hasattr(self, 'content') or not self.content:
+            return False
+
+        # 1. 彻底清除 C 语言风格的多行注释和单行注释，防止死代码干扰
+        clean_content = re.sub(r'/\*.*?\*/', '', self.content, flags=re.DOTALL)
+        clean_content = re.sub(r'//.*$', '', clean_content, flags=re.MULTILINE)
+
+        # 2. 专门用于匹配 phandle 属性的正则表达式
+        # \b 确保单词边界，防止误判类似 "my_phandle_name" 的变量名
+        # \s*=\s* 兼容等号两边任意的空格或换行
+        phandle_pattern = re.compile(r'\b(linux,)?phandle\s*=')
+
+        # 3. 搜寻并返回布尔值（只要找到一个就说明包含 phandle）
+        if phandle_pattern.search(clean_content):
+            return True
+            
+        return False
+
         
     def set_include_dirs(self, include_paths=None):
         """动态设置或追加外挂头文件的搜索路径目录列表"""
@@ -67,7 +90,7 @@ class OpenDeviceTree:
             if file:
                 try:
                     with open(file, "r", encoding="utf-8") as dtsi:
-                        node = OpenDeviceTreeManager.from_dts_text(dtsi.read())
+                        node = OpenDeviceTreeNode.from_dts_text(dtsi.read())
                     nodes.append(node)
                 except Exception as e:
                     print(f"Read error or failed parsing for {file}: {e}")
@@ -77,25 +100,6 @@ class OpenDeviceTree:
         # 🚀【核心修复】：如果匹配到了 include，但一个物理文件都没找到（nodes 为空），
         # 应当安全返回 None，防止下游 trees_merge 收到空列表引发空循环。
         return nodes if nodes else None
-
-    @property
-    def root_tree(self):
-        """主树与所有合法外挂独立子树深度合并后的总根节点树"""
-        # 🌟 由于 other_trees 内部做好了空列表防御，此处可以直接用 is not None 规避隐式 Bug
-        if self.other_trees is not None:
-            root = OpenDeviceTreeManager.trees_merge(self.main_tree, self.other_trees)
-        else:
-            root = self.main_tree
-        return root
-
-    @property
-    def sub_tree(self):
-        """对主树清理 phandle 引用后进行树分离导出的结构树"""
-        clean_tree = OpenDeviceTreeManager.clean_phandle(self.main_tree)
-        if self.other_trees is not None:
-            return OpenDeviceTreeManager.trees_devide(clean_tree, self.other_trees)
-        else:
-            return self.main_tree
 
     def _extract_file_includes(self, file_abs_path):
         """辅助方法：读取单个物理文件并提取其内部的第一层 include"""

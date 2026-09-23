@@ -3,7 +3,7 @@ from PySide6.QtGui import QStandardItem, QStandardItemModel
 # 💡 补全 QMenu 和 QMessageBox 的导入
 from PySide6.QtWidgets import QTreeView, QVBoxLayout, QWidget, QMenu, QMessageBox, QHeaderView
 from PySide6.QtCore import Signal, Qt, QPoint
-from lib.odtlib import OpenDeviceTree
+from lib.dmanager import OpenDeviceTreeManager
 
 class CustomDeviceTreeView(QWidget):
     # 声明文件加载成功的信号
@@ -59,8 +59,9 @@ class CustomDeviceTreeView(QWidget):
         """
         self.filepath = file_path
         # 1. 重新从虚拟属性获取最新的 Model 实例
+        manager = OpenDeviceTreeManager(file_path)
         
-        self.model = OpenDeviceTree(file_path).root_tree.qt_model
+        self.model = manager.new_tree.qt_model if file_path else QStandardItemModel()
             
         # 2. 将新模型绑定给视图
         self.tree_view.setModel(self.model)

@@ -7,6 +7,7 @@ class OpenDeviceTreeNode:
     def __init__(self, name=None, label=None, parent=None):
         self.name = name
         self.label = label
+        self._phandle = None
         self.properties = {}
 
         self.children = {}
@@ -20,9 +21,17 @@ class OpenDeviceTreeNode:
         return f"{self.parent.path}/{self.name}"
 
     @property
-    def phandle(self) -> str:
-        for prop in self.properties:
-            print(prop)
+    def phandle(self):
+        """原有的只读获取方法（保持你底层的逻辑不变）"""
+        return getattr(self, '_phandle', None)
+
+    # 🚀【核心修复】：使用 .setter 声明，且函数名必须继续叫 phandle
+    @phandle.setter
+    def phandle(self, value: str):
+        """允许外部安全写入修改 phandle 值"""
+        # 将传入的值绑定到底层的私有变量上（通常是 _phandle）
+        self._phandle = value
+        print(f"DEBUG: [OpenDeviceTreeNode] 成功写入核心属性 phandle = {value}")
 
     @property
     def nodes(self):
