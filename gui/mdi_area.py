@@ -1,6 +1,8 @@
+import os
+
 from PySide6.QtWidgets import QMdiArea, QTextEdit, QMessageBox, QFileDialog
 from PySide6.QtCore import Signal, Qt
-import os
+from lib.dmanager import OpenDeviceTreeManager
 
 # class CustomTextEditor(QTextEdit):
 class MdiManagerArea(QMdiArea):
@@ -31,6 +33,23 @@ class MdiManagerArea(QMdiArea):
         sub_window.show()
         return sub_window
 
+    def restore_dts(self):
+        active_sub = self.activeSubWindow()
+        if not active_sub:
+            return
+            
+        text_edit = active_sub.widget()
+        if not isinstance(text_edit, QTextEdit):
+            return
+        dt = OpenDeviceTreeManager(text_edit.file_path)
+        
+        print(f"File Path: {text_edit.file_path}")
+        sub_window = self.create_new_document()
+        text_edit = sub_window.widget()
+        text_edit.setPlainText("Processing")        
+        text_edit.setPlainText(dt.trees_devide().to_dts_file)
+        return
+
     def load_file_content(self, file_path):
         """双击左侧文件树时安全读取文件或激活已打开的编辑器视图"""
         if not os.path.isfile(file_path):
@@ -47,7 +66,7 @@ class MdiManagerArea(QMdiArea):
 
         # 🌟 如果没找到已打开的窗口，则走原有的新建/读取流程
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()
 
                 text_edit = QTextEdit()
@@ -63,9 +82,9 @@ class MdiManagerArea(QMdiArea):
                 
                 sub_window.resize(400, 300)
                 sub_window.show()
-            
-            self.file_loaded.emit(file_path)
-            
+                
+                self.file_loaded.emit(file_path)
+                            
         except Exception as e:
             QMessageBox.critical(
                 self, 

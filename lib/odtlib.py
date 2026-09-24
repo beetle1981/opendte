@@ -12,6 +12,8 @@ class OpenDeviceTree:
         self.include_dirs = []  # 💡 规范初始化：默认设为空列表，防止 NoneType 迭代报错
         self.name = Path(self.file_path).name  # filename.dts
         self.stem = Path(self.file_path).stem  # filename
+        self._main_tree = None
+        self._other_trees = None
         self.defines = {}
 
         # self._include_pattern = re.compile(r'(?:#include|/include/)\s*["<]([^">]+)["<]')
@@ -29,13 +31,17 @@ class OpenDeviceTree:
         # 设备树文件通常为 utf-8 或 ascii 编码
         with open(self.file_path, 'r', encoding='utf-8', errors='ignore') as f:
             self.content = f.read()
-    
     @property
     def main_tree(self):
+        if self._main_tree is not None:
+            return self._main_tree
+        return OpenDeviceTreeNode.from_dts_text(self.content)
+    
+    @main_tree.setter
+    def set_main_tree(self, value):
         """dts 文件构建的节点主树"""
         # 💡 注意：确保 from_dts_text 是实例方法还是类方法，如果是类方法建议用类名调用
-        node = OpenDeviceTreeNode.from_dts_text(self.content)
-        return node
+        self._main_tree = value
 
     @property
     def main_tree_has_phandle(self) -> bool:
@@ -82,24 +88,31 @@ class OpenDeviceTree:
     def other_trees(self):
         """include 头文件/包含文件构建的独立子树列表"""
         # 正则同时匹配 #include "..." 和 /include/ "..."
-        nodes = []
+        if self._other_trees is not None:
+            return self._other_trees
+        else:
+            nodes = []
 
-        for i in self.dts_includes:
-            print(f"Found include reference: {i}")
-            file = self._find_file(i)
-            if file:
-                try:
-                    with open(file, "r", encoding="utf-8") as dtsi:
-                        node = OpenDeviceTreeNode.from_dts_text(dtsi.read())
-                    nodes.append(node)
-                except Exception as e:
-                    print(f"Read error or failed parsing for {file}: {e}")
-            else:
-                print(f"Warning: Include file '{i}' could not be found in any search paths.")
+            for i in self.dts_includes:
+                print(f"Found include reference: {i}")
+                file = self._find_file(i)
+                if file:
+                    try:
+                        with open(file, "r", encoding="utf-8") as dtsi:
+                            node = OpenDeviceTreeNode.from_dts_text(dtsi.read())
+                        nodes.append(node)
+                    except Exception as e:
+                        print(f"Read error or failed parsing for {file}: {e}")
+                else:
+                    print(f"Warning: Include file '{i}' could not be found in any search paths.")
 
-        # 🚀【核心修复】：如果匹配到了 include，但一个物理文件都没找到（nodes 为空），
-        # 应当安全返回 None，防止下游 trees_merge 收到空列表引发空循环。
-        return nodes if nodes else None
+            # 🚀【核心修复】：如果匹配到了 include，但一个物理文件都没找到（nodes 为空），
+            # 应当安全返回 None，防止下游 trees_merge 收到空列表引发空循环。
+            return nodes if nodes else None
+        
+    @other_trees.setter
+    def set_other_trees(self, value):
+        self._other_trees = value
 
     def _extract_file_includes(self, file_abs_path):
         """辅助方法：读取单个物理文件并提取其内部的第一层 include"""

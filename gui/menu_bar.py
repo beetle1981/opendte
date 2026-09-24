@@ -234,10 +234,16 @@ class CustomMenuBar:
     def create_tools_menu(self):
         tools_menu = self.menu_bar.addMenu("&Tools")
 
-        # Undo Action
+        # Configure Action
         config_action = QAction("Conf（设置）", self.main_win)
         config_action.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_S))
         config_action.triggered.connect(self.main_win.settings_manager.open_settings_dialog)
         tools_menu.addAction(config_action)
+
+        # Restore DTS Action, create a new Qedit to show the new file
+        restore_action = QAction("Restore（还原）", self.main_win)
+        restore_action.setShortcut(QKeySequence(Qt.Modifier.CTRL | Qt.Modifier.SHIFT | Qt.Key.Key_R))
+        restore_action.triggered.connect(self.main_win.mdi_manager.restore_dts)
+        tools_menu.addAction(restore_action)
 
         

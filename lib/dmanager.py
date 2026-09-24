@@ -10,10 +10,10 @@ class OpenDeviceTreeManager(OpenDeviceTree):
     @property
     def new_tree(self):
         """对主树进行树合并或分离导出的结构树"""
-        if self.dts_includes:
+        if self.dts_includes is not None:
             if self.main_tree_has_phandle:
                 print(f"DEBUG: main tree has includes and phandle.")
-                self.main_tree = self.trees_devide()
+                # return self.trees_devide()
                 return self.main_tree
             else:
                 print(f"DEBUG: main tree has includes and has NO phandle.")
@@ -21,6 +21,41 @@ class OpenDeviceTreeManager(OpenDeviceTree):
         else:
             print(f"DEBUG: main tree has NO includes.")
             return self.main_tree
+
+    def trees_devide(self) -> 'OpenDeviceTreeNode':
+        # --------------------------------------------------------------------
+        # step1: main_tree 从 include 里恢复节点标签，Debug 输出
+        # --------------------------------------------------------------------
+        print("\n🚀 DEBUG: [Step 1] 开始从 include 树列表中恢复 main_tree 的标签映射...")
+        main_tree = self.main_tree
+        self.recover_labels_recursive(main_tree)
+        print("✔ DEBUG: [Step 1] 节点标签映射恢复完毕。")
+
+        return main_tree
+
+    def find_node_by_path_in_includes(self, path: str) -> 'OpenDeviceTreeNode | None':
+        for o_tree in self.other_trees:
+            node = o_tree.find_node_by_path(o_tree, path)
+            if node: return node
+        return None
+
+    def recover_labels_recursive(self, node: OpenDeviceTreeNode) -> 'OpenDeviceTreeNode':
+        if not node: return
+        node_path = getattr(node, 'path', '') 
+        print("A")       
+        inc_node = self.find_node_by_path_in_includes(node_path)
+        if inc_node and getattr(inc_node, 'label', None):
+            node.label = inc_node.label
+            print(f"       [Label恢复] 路径: {node_path} -> 从 include 树成功同步标签: '{node.label}'")
+        else:
+            if getattr(node, 'label', None):
+                print(f"       [Label保留] 路径: {node_path} -> 保持主树自有标签: '{node.label}'")
+        
+        for child in getattr(node, 'children', {}).values():
+            self.recover_labels_recursive(child)
+
+
+
 
     def trees_merge(self) -> OpenDeviceTreeNode:
         """
@@ -139,202 +174,4 @@ class OpenDeviceTreeManager(OpenDeviceTree):
 
         return final_root
 
-    def trees_devide(self) -> 'OpenDeviceTreeNode':
-        """
-        对主树进行结构树分离导出，清理引用并转化为标准编译器语法格式
-        """
-        print("\n" + "="*60)
-        print("DEBUG: [trees_devide] 启动设备树高级差分与分离算法")
-        print("="*60)
 
-        # 🚀 统一局部变量引用，确保整个生命周期内数据源对齐
-        main_tree = self.main_tree
-        other_trees = self.other_trees if self.other_trees is not None else []
-
-        # --------------------------------------------------------------------
-        # 内部路径检索辅助函数：在 include 树列表中寻找相同路径的节点
-        # --------------------------------------------------------------------
-        def find_node_by_path_in_includes(path: str) -> 'OpenDeviceTreeNode | None':
-            for o_tree in other_trees:
-                node = find_node_recursive(o_tree, path)
-                if node: return node
-            return None
-
-        def find_node_recursive(current_node, target_path):
-            if not current_node: return None
-            if getattr(current_node, 'path', '') == target_path:
-                return current_node
-            # 🚀 核心适配：使用 .values() 遍历字典里的子节点实体，防止遍历出键名字符串
-            for child in getattr(current_node, 'children', {}).values():
-                found = find_node_recursive(child, target_path)
-                if found: return found
-            return None
-
-        # --------------------------------------------------------------------
-        # step1: main_tree 从 include 里恢复节点标签，Debug 输出
-        # --------------------------------------------------------------------
-        print("\n🚀 DEBUG: [Step 1] 开始从 include 树列表中恢复 main_tree 的标签映射...")
-        def recover_labels_recursive(node):
-            if not node: return
-            node_path = getattr(node, 'path', '')
-            
-            inc_node = find_node_by_path_in_includes(node_path)
-            if inc_node and getattr(inc_node, 'label', None):
-                node.label = inc_node.label
-                print(f"       [Label恢复] 路径: {node_path} -> 从 include 树成功同步标签: '{node.label}'")
-            else:
-                if getattr(node, 'label', None):
-                    print(f"       [Label保留] 路径: {node_path} -> 保持主树自有标签: '{node.label}'")
-            
-            for child in getattr(node, 'children', {}).values():
-                recover_labels_recursive(child)
-
-        recover_labels_recursive(main_tree)
-        print("✔ DEBUG: [Step 1] 节点标签映射恢复完毕。")
-
-        # --------------------------------------------------------------------
-        # step2: main_tree 从 properties 中 phandle 或 linux phandle 提取值写入 phandle 属性，
-        #        然后从 properties 删除 phandle。添加 DEBUG 输出
-        # --------------------------------------------------------------------
-        print("\n🚀 DEBUG: [Step 2] 开始抽取属性中的 phandle/linux,phandle 至节点实体内部...")
-        def process_phandles_recursive(node):
-            if not node: return
-            properties = getattr(node, 'properties', {})
-            
-            target_key = None
-            if 'phandle' in properties:
-                target_key = 'phandle'
-            elif 'linux,phandle' in properties:
-                target_key = 'linux,phandle'
-                
-            if target_key:
-                raw_value = properties[target_key]
-                print(f"       [Phandle抓取] 节点: {getattr(node, 'path', '')} | 发现内嵌属性 '{target_key}': {raw_value}")
-                
-                # 解包潜在的列表或单值转化为标准整型数据
-                phandle_val = raw_value[0] if isinstance(raw_value, list) else raw_value
-                node.phandle = phandle_val
-                
-                # 从字典中剔除
-                del properties[target_key]
-                print(f"       [Phandle改写] 成功擦除 properties['{target_key}']，并挂载至实体 node.phandle = {phandle_val}")
-            
-            for child in getattr(node, 'children', {}).values():
-                process_phandles_recursive(child)
-
-        process_phandles_recursive(main_tree)
-        print("✔ DEBUG: [Step 2] Phandle 实体属性提取与字典清洗完毕。")
-
-        # --------------------------------------------------------------------
-        # step3：找出有 phandle 值引用的属性，将对应引用值换成对应节点的标签的引用，添加 DEBUG 输出
-        # --------------------------------------------------------------------
-        print("\n🚀 DEBUG: [Step 3] 开始进行全局 phandle 引用向 Label 标签引用的全量值转换...")
-        
-        phandle_to_label_map = {}
-        def build_phandle_map(node):
-            if not node: return
-            p_val = getattr(node, 'phandle', None)
-            l_val = getattr(node, 'label', None)
-            if p_val and l_val:
-                phandle_to_label_map[p_val] = l_val
-            for child in getattr(node, 'children', {}).values():
-                build_phandle_map(child)
-                
-        build_phandle_map(main_tree)
-        for o_tree in other_trees:
-            build_phandle_map(o_tree)
-
-        def replace_references_recursive(node):
-            if not node: return
-            properties = getattr(node, 'properties', {})
-            
-            for prop_name, prop_val in list(properties.items()):
-                check_val = prop_val[0] if isinstance(prop_val, list) and len(prop_val) > 0 else prop_val
-                
-                if check_val in phandle_to_label_map:
-                    target_label = phandle_to_label_map[check_val]
-                    properties[prop_name] = f"&{target_label}"
-                    print(f"       [引用替换] 节点: {getattr(node, 'name', '')} | 属性 '{prop_name}': {prop_val} -> 成功映射为标签引用: &{target_label}")
-            
-            for child in getattr(node, 'children', {}).values():
-                replace_references_recursive(child)
-
-        replace_references_recursive(main_tree)
-        print("✔ DEBUG: [Step 3] 全局符号替换与标签解包映射完毕。")
-
-        # --------------------------------------------------------------------
-        # step4: main_tree 去除所有 include 含有的同名节点，相同值的属性，
-        #        最后将节点名改成 &label 引用节点。添加 debug 输出
-        # --------------------------------------------------------------------
-        print("\n🚀 DEBUG: [Step 4] 开始实施 include 树共有资产的差分裁剪与 &label 语法改造...")
-        def optimize_and_relabel_recursive(node):
-            if not node: return
-            node_path = getattr(node, 'path', '')
-            properties = getattr(node, 'properties', {})
-            
-            inc_node = find_node_by_path_in_includes(node_path)
-            if inc_node:
-                inc_props = getattr(inc_node, 'properties', {})
-                print(f"       [差分对比] 命中 include 同路径节点: {node_path}，启动属性裁剪...")
-                
-                for p_key in list(properties.keys()):
-                    if p_key in inc_props and properties[p_key] == inc_props[p_key]:
-                        del properties[p_key]
-                        print(f"              [属性剥离] 移除与 include 完全相同的冗余属性: '{p_key}'")
-
-            if getattr(node, 'label', None):
-                old_name = node.name
-                node.name = f"&{node.label}"
-                print(f"       [语法缩编] 节点路径: {node_path} | 名称 '{old_name}' -> 成功转换为引用格式: '{node.name}'")
-            else:
-                print(f"       [Step 4 清洗警告] 节点 '{getattr(node, 'name', '')}' 无可用 Label，保留原名")
-
-            for child in getattr(node, 'children', {}).values():
-                optimize_and_relabel_recursive(child)
-
-        optimize_and_relabel_recursive(main_tree)
-        print("✔ DEBUG: [Step 4] 冗余属性剥离与引用层级改写完毕。")
-
-        # --------------------------------------------------------------------
-        # step5：将所有的十六进制值换成十进制值， 添加 debug输出 (🚀 已完美补全截断)
-        # --------------------------------------------------------------------
-        print("\n🚀 DEBUG: [Step 5] 启动数据标准化：全局检索并将所有十六进制形式的数据转换为十进制...")
-        def convert_hex_to_dec_recursive(node):
-            if not node: return
-            properties = getattr(node, 'properties', {})
-            
-            for prop_name, prop_val in properties.items():
-                if isinstance(prop_val, str) and prop_val.lower().startswith('0x'):
-                    try:
-                        dec_val = int(prop_val, 16)
-                        properties[prop_name] = dec_val
-                        print(f"       [进制转换] 节点: {getattr(node, 'path', '')} | 属性 '{prop_name}': {prop_val} -> {dec_val}")
-                    except ValueError:
-                        pass
-                elif isinstance(prop_val, list):
-                    new_list = []
-                    has_changed = False
-                    for item in prop_val:
-                        if isinstance(item, str) and item.lower().startswith('0x'):
-                            try:
-                                new_list.append(int(item, 16))
-                                has_changed = True
-                            except ValueError:
-                                new_list.append(item)
-                        else:
-                            new_list.append(item)
-                    if has_changed:
-                        properties[prop_name] = new_list
-                        print(f"       [列表进制转换] 节点: {getattr(node, 'path', '')} | 属性 '{prop_name}' 内部元素已转十进制")
-
-            for child in getattr(node, 'children', {}).values():
-                convert_hex_to_dec_recursive(child)
-
-        convert_hex_to_dec_recursive(main_tree)
-        print("✔ DEBUG: [Step 5] 十六进制格式标准化过滤完毕。")
-        
-        print("\n" + "="*60)
-        print("DEBUG: [trees_devide] 设备树高级分离与反解流程顺利完成！")
-        print("="*60 + "\n")
-        
-        return main_tree

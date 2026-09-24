@@ -13,6 +13,8 @@ if __name__ == "__main__":
     include_folders = None 
     dt = OpenDeviceTreeManager(dts_file_path)
     print(f"DTS File Path: {dt.file_path}\nKernel Path: {dt.kernelpath}")
+    root = dt.new_tree
+    print(root.to_dts_file)
     try:
         # base_dir = dt.base_dir
         # raw_includes = dt.all_raw_includes
@@ -22,8 +24,7 @@ if __name__ == "__main__":
 
         print(f"DTS has Phandle/linux, phandle: {dt.main_tree_has_phandle}")
 
-        root = dt.new_tree
-        print(root.to_dts_file)
+
         # print(f"Base DIR: {base_dir};\nRAW Includes: {raw_includes};\nDTSi Includes: {dt.dts_includes};\nDTS Headers: {dt.dts_headers}")
 
         # test main_tree

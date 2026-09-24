@@ -20,6 +20,13 @@ class OpenDeviceTreeNode:
             return f"/{self.name}" if self.name != "/" else "/"
         return f"{self.parent.path}/{self.name}"
 
+    def find_node_by_path(self, node, path):
+        if node.path == path:
+            return node
+        for child in node.children.values():
+            return self.find_node_by_path(child, path)
+        return None
+    
     @property
     def phandle(self):
         """原有的只读获取方法（保持你底层的逻辑不变）"""
